@@ -1,18 +1,25 @@
 #include "WiFi.h"
 #include <HTTPClient.h>
-#include <SHT1x.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 
-// Specify data and clock connections and instantiate SHT1x object
-#define dataPin  12
-#define clockPin 13
-SHT1x sht1x(dataPin, clockPin);
-//----------------------------------------
+// Data wire is conntec to the Arduino digital pin 4
+#define ONE_WIRE_BUS 15
+
+// Setup a oneWire instance to communicate with any OneWire devices
+OneWire oneWire(ONE_WIRE_BUS);
+
+// Pass our oneWire reference to Dallas Temperature sensor 
+DallasTemperature sensors(&oneWire);
+
+// Humidity analog pin
+const int humd_pin = 18;
 
 // Defining LED PINs on the ESP32 Board.
 #define On_Board_LED_PIN  2
@@ -20,26 +27,33 @@ SHT1x sht1x(dataPin, clockPin);
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 
-//----------------------------------------SSID and PASSWORD of your WiFi network.
-const char* ssid = "";  //--> Your wifi name
-const char* password = ""; //--> Your wifi password
-//----------------------------------------
+// Wi-Fi credentials
+const char* ssid = "MTN";  //--> Your wifi name
+const char* password = "settings"; //--> Your wifi password
 
 // Google script Web_App_URL.
-String Web_App_URL = "https://script.google.com/macros/s/AKfycbzeJuQ6tR-_erFKArkx-MR1fBmBCAd-dMVvdt6H8zi0zkJ5_mURwhatA6VYJUJn2HGV0Q/exec";
+String Web_App_URL = "https://script.google.com/macros/s/AKfycbz9S7Xf5JLDvEKLAsCEQxp5iuPHv_bCgVbpHoxE1ckFOS1FBFHcL8Uicde2nlhoR86I/exec";
 
 
 String Status_Read_Sensor = "";
 float Temp;
 int Humd;
 
+// Sleep duration (30 minutes in seconds)
+#define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
+#define TIME_TO_SLEEP  600     /* Time ESP32 will go to sleep (in seconds) */
 
-void Getting_DHT10_Sensor_Data() {
-  // Reading temperature or humidity takes about 250 milliseconds!
-  // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
-  Humd = sht1x.readHumidity();
-  // Read temperature as Celsius (the default)
-  Temp = sht1x.readTemperatureC();
+
+void Getting_Sensor_Data() {
+
+  int humd_pin_value = analogRead(humd_pin);
+  Serial.print("Analogue: ");
+  Serial.println(humd_pin_value);
+
+  // Call sensors.requestTemperatures() to issue a global temperature and Requests to all devices on the bus
+  sensors.requestTemperatures(); 
+  Humd = map(humd_pin_value, 0, 4095, 0, 100); ;
+  Temp = sensors.getTempCByIndex(0);
 
   // Check if any reads failed and exit early (to try again).
   if (isnan(Humd) || isnan(Temp)) {
@@ -76,9 +90,10 @@ void Getting_DHT10_Sensor_Data() {
   display.display();
 }
 
-//________________________________________________________________________________VOID SETUP()
 void setup() {
   // put your setup code here, to run once:
+  // Start up the library
+  sensors.begin();
 
   Serial.begin(115200);
 
@@ -150,24 +165,10 @@ void setup() {
   //::::::::::::::::::
   //----------------------------------------
 
-  delay(100);
-
-  Serial.println();
-  Serial.println("DHT10 Begin");
-  Serial.println();
   delay(1000);
   
-
-  delay(2000);
-}
-//________________________________________________________________________________
-
-//________________________________________________________________________________VOID LOOP()
-void loop() {
-  // put your main code here, to run repeatedly:
-
   // Calling the "Getting_DHT10_Sensor_Data()" subroutine.
-  Getting_DHT10_Sensor_Data();
+  Getting_Sensor_Data();
 
   //----------------------------------------Conditions that are executed when WiFi is connected.
   // This condition is the condition for sending or writing data to Google Sheets.
@@ -212,9 +213,17 @@ void loop() {
     
     digitalWrite(On_Board_LED_PIN, LOW);
     Serial.println("-------------");
-  }
-  //----------------------------------------
 
-  delay(10000);
+    Serial.println("Going to sleep now");
+    esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+    esp_deep_sleep_start();
+  }
+}
+//________________________________________________________________________________
+
+//________________________________________________________________________________VOID LOOP()
+void loop() {
+  // put your main code here, to run repeatedly:
+
 }
 
